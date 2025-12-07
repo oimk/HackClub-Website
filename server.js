@@ -1,16 +1,15 @@
 require('dotenv').config();
-const { error, Console } = require('console');
-const { Clinet } = require('pg');
+const { Pool } = require('pg');
 const connectionString = process.env.DATABASE_URL; //Input Neon's url
 const express = require('express'); // framework
 const session = require('express-session');
-const PgStore = require('connect-pg')(session);
+const PgStore = require('connect-pg-simple')(session);
 const app = express(); //set framework
-const PORT = 3000; // Change to neon's port
+const PORT = process.env.PORT || 3000; // Change to neon's port
 app.use(express.urlencoded({extended: true}));
 app.set('view engine', 'ejs'); //HTML and Javascript library for inserting points and username
 
-const pool = new pool({
+const pool = new Pool({
     connectionString: connectionString,
 });
 const database = pool;
@@ -36,8 +35,7 @@ database.connect()
 
 //Directs the serve output to the index.html file
 const path = require('path');
-const { userInfo } = require('os');
-const { resourceLimits } = require('worker_threads');
+const { default: PG } = require('pg');
 app.use(express.static(path.join(__dirname, 'client')));
 app.use('/admin_assets', express.static(path.join(__dirname, 'admins')));
 
@@ -47,7 +45,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true, //turn to true only in HTTPS
+        secure: true,
         maxAge: 1000 * 60 * 60 * 24
     },
     store: new PgStore({
@@ -178,17 +176,16 @@ app.post('/admin/signin', (req, res) => {
     if (checkUser === USER_NAME && checkPass === ADMIN_PASSWORD){
         req.session.isAdmin = true;
         console.log("Admin: " + req.session.isAdmin);
-
-        return req.session.save((err) => {
-            if (err) {
-                console.error("Session save failed:", err);
-                return res.redirect('/?status=error_session_save');
-            }
-            return res.redirect('/admin/dashborad');
-        });
+        return res.redirect('/admin/dashborad');
     } 
     return res.redirect('/?status=failed');
 });
+
+app.get('/admin/dashborad', requireAdmin, (req, res) => {
+    console.log("Reached dashborad");
+    return res.sendFile(path.join(__dirname, 'admins', 'admin.html'));
+});
+
 
 app.post('/admin/delete-user', requireAdmin, (req,res) =>{
     const username = req.body.username;
@@ -230,11 +227,8 @@ function runDelete(sql, params, res, username){
 }
 
 
-app.get('/admin/dashborad', requireAdmin, (req, res) => {
-    return res.sendFile(path.join(__dirname, 'admins', 'admin.html'));
-});
-
 function requireAdmin(req, res, next) {
+    console.log("Acess reach required admin");
     if (req.session.isAdmin == true){
         return next();
     } else {
