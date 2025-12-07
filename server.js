@@ -1,34 +1,47 @@
 require('dotenv').config();
 const { error, Console } = require('console');
+const { Clinet } = require('pg');
+const connectionString = process.env.DATABASE_URL; //Input Neon's url
 const express = require('express'); // framework
-const sqlite3 = require('sqlite3').verbose(); //database
 const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
+const PgStore = require('connect-pg')(session);
 const app = express(); //set framework
-const PORT = 3000; // port
+const PORT = 3000; // Change to neon's port
 app.use(express.urlencoded({extended: true}));
 app.set('view engine', 'ejs'); //HTML and Javascript library for inserting points and username
 
-//Create or start database;
-const database = new sqlite3.Database('./user_points.db', (err) => {
-    if (err){
-        console.error("Database connection error: ", error.message);
-    } else {
-        console.log("Connected to User Database.");
-
-        database.run(`CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            points INTEGER
-            )`, (err) => {} 
-        );
-    }
+const pool = new pool({
+    connectionString: connectionString,
 });
+const database = pool;
+
+//Create or start database;
+database.connect()
+    .then(() => {
+        console.log("Connected to PostgreSQL User Database.");
+        return database.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE,
+                points INTEGER
+            )
+        `); 
+    })
+    .then(() => {
+        console.log("Verified 'users' table exists.");
+    })
+    .catch(err => {
+        console.error("Database initialization error:", err.stack);
+    });
 
 //Directs the serve output to the index.html file
 const path = require('path');
+const { userInfo } = require('os');
+const { resourceLimits } = require('worker_threads');
 app.use(express.static(path.join(__dirname, 'client')));
 app.use('/admin_assets', express.static(path.join(__dirname, 'admins')));
+
+//cookies
 app.use(session({
     secret: process.env.SESSION_KEY,
     resave: false,
@@ -37,28 +50,32 @@ app.use(session({
         secure: true, //turn to true only in HTTPS
         maxAge: 1000 * 60 * 60 * 24
     },
-    store: new SQLiteStore({ 
-        db: 'user_points.db', 
-        dir: '.' // Directory where db is located
+    store: new PgStore({
+        pool: pool,
+        tabelName: 'session_data',
+        createTableIfMissing: true
     }),
 }));
 
 //Sign in commands
 app.post('/signin', (req, res) => {
     const checkUser = req.body.username;
-    database.get('SELECT username, points FROM users WHERE username = ?', [checkUser], (err, userProfile) => {
-        if (err) {
-            console.error(err.mesasge);
-            return res.send("Database error during login.");
-        }
-        if (userProfile) {
-            console.log("Found user:", userProfile.username, "Points:", userProfile.points);
-            return res.render('profile', {
-                username: userProfile.username, points: userProfile.points
-            });
-        } else {
+    database.query('SELECT username, points FROM users WHERE username = $1', [checkUser])
+    .then(userProfile => {
+        if (result.rows.length === 0){
+            console.log(`User '${checkUser}' not found.`);
             return res.redirect('/?status=signin_failed');
         }
+
+        console.log("Found user:", userProfile.row[0].username, "Points:", userProfile.row[0].points);
+        return res.render('profile', {
+            username: userProfile.username,
+            points: userProfile.points
+        });
+    })
+    .catch(err => {
+        console.error("Database error when getting user:", err.stack);
+        return res.status(500).send('An server error occurred');
     });
 });
 
@@ -66,15 +83,19 @@ app.post('/signin', (req, res) => {
 //Sign up command
 app.post('/signup', (req, res) => {
     const newUser = req.body.newUser;
-    database.run(`INSERT INTO users (username, points) VALUES (?, ?)`, [newUser, 0], function(err) {
-        if (err){
-            return res.redirect('/?status=signup_failed');
+    database.query(`INSERT INTO users (username, points) VALUES ($1, $2)`, [newUser, 0])
+    .then(() => {
+        console.log(`User ${newUser} created successfully.`);
+        return res.redirect("/?status=signup_success");  
+    })
+    .catch(err =>{
+        if (err.code === '23505') {
+                console.warn(`Signup Failed: Username '${newUser}' already exists.`);
+                return res.redirect("/?status=signup_failed");
         }
-
-        console.log(`User ${newUser} created with ID: ${this.lastID}`);
-        return res.redirect("/?status=signup_success");
+        console.error("Database error when adding user:", err.stack);
+        return res.status(500).send('An server error occurred');
     });
-
 });
 
 //Update point command --> highly sensitive 
@@ -89,7 +110,7 @@ app.post('/admin/update-points', requireAdmin, (req, res) => {
     let params;
 
     if (targetUsername.toUpperCase() === 'ALL') {
-        sql = 'UPDATE users SET points = points + ?';
+        sql = 'UPDATE users SET points = points + $1';
         params = [pointsChange];
         return runUpdate(sql, params, res, pointsChange);
     } else if (targetUsername){
@@ -99,47 +120,49 @@ app.post('/admin/update-points', requireAdmin, (req, res) => {
     }
 });
 
-//checks if suer is vaild
-function checkUser(targetUsername, res, pointsChange){
-    database.get('SELECT username FROM users WHERE username = ?', [targetUsername], (err, userProfile) => {
-            if (err){
-                console.error("Database Check Error: ", err.message);
-                return res.status(500).send("Database Check Failed");
-            }
-            if (!userProfile) {
-                return res.status(400).send("Invaild Username");
-            }
 
-            const sql = 'UPDATE users SET points = points + ? WHERE username = ?';
+//checks if user is vaild
+function checkUser(targetUsername, res, pointsChange){
+    database.query('SELECT username FROM users WHERE username = $1', [targetUsername])
+    .then(result => {
+
+        if (result.rows.length === 0) {
+            console.warn(`Attempted update on non-existent user: ${targetUsername}`);
+            return res.status(404).redirect("/admin/dashborad/?status=user-not-found");
+        }
+            const sql = 'UPDATE users SET points = points + $1 WHERE username = $2';
             const params = [pointsChange, targetUsername];
             return runUpdate(sql, params, res, pointsChange);
+    })
+    .catch(err =>{
+        console.error("Database Check Error: ", err.message);
+        return res.status(500).redirect("admin/dashborad/?status=update-failed");        
     });
 }
 
+
 function runUpdate(sql, params, res, pointsChange) {
-        database.run(sql, params, function(err) {
-        if (err){
-            console.error("Database Update Error:", err.message);
-            return res.status(500).redirect("admin/dashborad/?status=update-failed")
-        }
-
-        const message = `${this.changes} user(s) had their points updated. Update value is ${pointsChange}`;
-        console.log(message);
-
-        return res.redirect(`/admin/dashborad/?status=update-success`);
-    });
+        database.query(sql, params)
+        .then(result => {
+            console.log(`Sucessfully updated ${result.rowCount} user points by ${pointsChange}`);
+            return res.redirect(`/admin/dashborad/?status=update-success`);
+        })
+        .catch(err => {
+                console.error("Database Update Error:", err.message);
+                return res.status(500).redirect("admin/dashborad/?status=update-failed");        
+        });
 }
 
 app.post('/admin/output-database', requireAdmin, (req, res) =>{
     console.log("Outputted Database");
-    database.all('SELECT id, username, points FROM users', [], (err, userObj) => {
-        if (err) {
-            console.error(err.message);
-            return res.status(500).send("Failed to retrieve user data.");
-        }
-        
-        return res.render('userlist', { 
-            user: userObj});
+    database.query('SELECT id, username, points FROM users')
+    .then(result => {
+        const userObj = result.rows;
+        return res.render('userlist', {user: userObj});
+    })
+    .catch(err => {
+        console.error("Database query error: ", err.stack);
+        return res.status(500).send("Failed to retrieve user data.");
     });
 });
 
@@ -173,36 +196,36 @@ app.post('/admin/delete-user', requireAdmin, (req,res) =>{
          // Prevent accidental deletion of all users or null request
          return res.status(400).redirect("/admin/dashborad/?status=user-not-found");
     }
-    
-    database.get('SELECT username FROM users WHERE username = ?', [username], (err, userProfile) => {
-      if (err){
-        console.error("Databae Check Error: ", err.message);
-        return res.status(500).redirect("/admin/dashborad/?status=delete-failed");
-      }
-      
-      if (!userProfile){
-        return res.status(404).redirect("/admin/dashborad/?status=user-not-found");
-      }
 
-    sql = "DELETE FROM users WHERE username = ?";
-    params = [username];
-    return runDelete(sql, params, res, username);
+    database.query('SELECT username FROM users WHERE username = $1', [username])
+    .then(result => {
+        if (result.rows.length === 0){
+            return res.status(404).redirect("/admin/dashborad/?status=user-not-found");
+        }
+        sql = "DELETE FROM users WHERE username = $1";
+        params = [username];
+        return runDelete(sql, params, res, username);
+    })
+    .catch(err => {
+        console.error("Databae Check Error: ", err.stack);
+        return res.status(500).redirect("/admin/dashborad/?status=delete-failed");
     });
 });
-function runDelete(sql, params, res, username){
-    database.run(sql, params, function(err) {
-        if (err){
-            console.log("Failed to delete user: " + err.message);
-            return res.status(500).redirect("/admin/dashborad/?status=delete-failed");
-        }
 
-        if (this.changes === 0){
-            //Safety net
-             return res.status(404).redirect("/admin/dashborad/?status=user-not-found");
+
+function runDelete(sql, params, res, username){
+    database.query(sql, params)
+    .then(result => {
+        if (result.rowCount === 0){
+            return res.status(404).redirect("/admin/dashborad/?status=user-not-found");
         }
 
         console.log(`${username} was deleted from the database.`);
         return res.status(302).redirect("/admin/dashborad/?status=delete-success");
+    })
+    .catch(err =>{
+        console.log("Failed to delete user: " + err.message);
+        return res.status(500).redirect("/admin/dashborad/?status=delete-failed");
     });
 }
 
