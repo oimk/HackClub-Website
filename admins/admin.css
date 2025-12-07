@@ -1,0 +1,13 @@
+form{
+    padding: 20px;
+    width: 200px;
+    border-radius: 4px;
+    margin: 5px;
+    border: 1px dashed;
+    display: inline-block;
+}
+input {
+    display: block;
+    margin-top: 5px;
+    padding: 8px;
+}

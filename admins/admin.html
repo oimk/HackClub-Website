@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/admin_assets/admin.css">
+    <title>Panel</title>
+</head>
+<body>
+    <h1>Weclome, Administrator!</h1>
+    <form id="addPoints" action="/admin/update-points" method="post">
+        <label for="targetUsername">Target Username (or type 'ALL'):</label><br>
+        <input type="text" id="targetUsername" name="targetUsername" placeholder="e.g., Bob or ALL" required><br>
+
+        <label for="points_change">Points Change (e.g., 50 or -10):</label><br>
+        <input type="text" id="pointsChange" name="pointsChange" required><br>
+        <button type="submit">Update Points</button>
+    </form>
+    <form id="deleteUser" action="/admin/delete-user" method="post">
+        <label for="username">Target Username (Cannot delete all)</label><br>
+        <input type="text" id="username" name="username" required><br>
+        <button type="submit">Delete User</button>
+    </form><br>
+    <br>
+    <form id="outputUser" action="/admin/output-database" method="post">
+        <button id="output-user-button" type="submit">Output all users</button>
+    </form>
+
+    <p><a href="/">Go back to main page</a></p>
+    <script src="/admin_assets/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+
+# Dependency folder
+node_modules/
+
+# Environment variables
+.env
+
+# Database file
+user_points.db

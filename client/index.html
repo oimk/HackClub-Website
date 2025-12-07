@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <link rel="scripts" href="client.js">
+    <title>HackClub Bank</title>
+</head>
+
+
+<body>
+    <h1>Welcome to the HackClub Bank!</h1>
+    <p>
+        This is super early in development so don't expect too much.
+
+        <br>Choose one of the following to sign up or go to your created profile.
+    </p>
+
+     <!-- Back end route for action needs to be implemented-->
+    <form id="signin" action="/signin" method="post">
+        <label  for="username">Enter your username to sign in (Case Sensitive):</label><br>
+        <input type="text" id="username" name="username" placeholder="Enter your username" required><br>
+        <button type="submit">View Profile</button><br>
+    </form>
+
+    <form id="create-profile" action="/signup" method="post">
+        <label  for="newUser">If you don't have a account, sign up here. Please use your first name and last name sepearted by a dash</label><br>
+        <input type="text" id="newUser" name="newUser" placeholder="Enter your username" required><br>
+        <button type="submit">Create profile</button><br>
+    </form>
+
+    <form id="Admins" action="/admin/signin" method="post">
+        <label for="password">Administrator log in</label><br>
+        <input type="text" id="adminUser" name="adminUser" placeholder="Username">
+        <input type="text" id="password" name="password" placeholder="Admin Key" required><br>
+        <button type="submit">Sign In</button><br>
+    </form>
+    <script src="client.js"></script>
+</body>
+</html>
