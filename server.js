@@ -38,6 +38,7 @@ const path = require('path');
 const { default: PG } = require('pg');
 app.use(express.static(path.join(__dirname, 'client')));
 app.use('/admin_assets', express.static(path.join(__dirname, 'admins')));
+app.set('trust proxy', 1);
 
 //cookies
 app.use(session({
@@ -169,11 +170,11 @@ app.post('/admin/signin', (req, res) => {
     const checkUser = req.body.adminUser;
     const checkPass = req.body.password;
 
-    const USER_NAME = process.env.ADMIN_USERNAME;
+    const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
     const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 
-    if (checkUser === USER_NAME && checkPass === ADMIN_PASSWORD){
+    if (checkUser === ADMIN_USERNAME && checkPass === ADMIN_PASSWORD){
         req.session.isAdmin = true;
         console.log("Admin: " + req.session.isAdmin);
         return res.redirect('/admin/dashborad');
