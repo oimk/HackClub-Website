@@ -11,6 +11,8 @@ app.set('view engine', 'ejs'); //HTML and Javascript library for inserting point
 
 const pool = new Pool({
     connectionString: connectionString,
+    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+    connectionTimeoutMillis: 2000, // How long to wait for a connection
 });
 const database = pool;
 
